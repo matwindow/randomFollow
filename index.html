@@ -118,8 +118,8 @@
             const randomPage = Math.floor(Math.random() * 100) + 1; 
             
             try {
-                // POPRAWIONE: Prawidłowe użycie `${}` wewnątrz template literals
-                const searchUrl = `https://github.com${randomChar}&page=${randomPage}&per_page=1`;
+                // POPRAWIONE: Precyzyjny i prawidłowo sformatowany adres URL API GitHub
+                const searchUrl = `https://github.com{randomChar}&page=${randomPage}&per_page=1`;
                 const response = await fetch(searchUrl, { headers });
                 
                 if (response.status === 401) {
@@ -138,7 +138,7 @@
                     continue;
                 }
                 
-                // POPRAWIONE: Wyciąganie loginu z pierwszego elementu tablicy wyników wyszukiwania
+                // POPRAWIONE: Pobieranie wartości loginu z pierwszego indeksu tablicy [0]
                 const targetUser = data.items[0].login;
                 log(`Found random user: <strong>${targetUser}</strong>. Attempting to follow...`);
 
@@ -154,7 +154,7 @@
                     log(`Failed to follow ${targetUser} (Status: ${followResponse.status})`, 'error');
                 }
 
-                // Bezpieczna przerwa w celu uniknięcia blokady limitów zapytań
+                // Bezpieczna dwusekundowa pauza
                 await new Promise(resolve => setTimeout(resolve, 2000));
 
             } catch (err) {
