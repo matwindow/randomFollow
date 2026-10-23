@@ -1,85 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub Random Follower</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-            background-color: #0d1117;
-            color: #c9d1d9;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .container {
-            background-color: #161b22;
-            padding: 30px;
-            border-radius: 8px;
-            border: 1px solid #30363d;
-            width: 400px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-        }
-        h2 { text-align: center; color: #f0f6fc; margin-top: 0; }
-        label { display: block; margin: 15px 0 5px; font-size: 14px; }
-        input {
-            width: 100%;
-            padding: 10px;
-            background-color: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            color: #f0f6fc;
-            box-sizing: border-box;
-            font-size: 14px;
-        }
-        button {
-            width: 100%;
-            padding: 12px;
-            margin-top: 20px;
-            background-color: #238636;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        button:hover { background-color: #2ea44f; }
-        button:disabled { background-color: #216e39; opacity: 0.6; cursor: not-allowed; }
-        #logs {
-            margin-top: 20px;
-            max-height: 150px;
-            overflow-y: auto;
-            background: #0d1117;
-            padding: 10px;
-            border-radius: 6px;
-            font-family: monospace;
-            font-size: 12px;
-            border: 1px solid #30363d;
-        }
-        .success { color: #58a6ff; }
-        .error { color: #f85149; }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <h2>GitHub Random Follower</h2>
-    
-    <label for="token">GitHub Personal Access Token (PAT):</label>
-    <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
-    
-    <label for="count">How many random people to follow?</label>
-    <input type="number" id="count" value="1" min="1" max="50">
-    
-    <button id="runBtn" onclick="startFollowing()">Find & Follow Random People</button>
-    
-    <div id="logs">App ready. Enter token and count to start...</div>
-</div>
-
 <script>
     function log(message, type = '') {
         const logsDiv = document.getElementById('logs');
@@ -94,69 +12,73 @@
         const btn = document.getElementById('runBtn');
 
         if (!token) {
-            alert('Please enter a GitHub Personal Access Token first!');
+            alert('Proszę najpierw wprowadzić token GitHub!');
             return;
         }
 
         btn.disabled = true;
         document.getElementById('logs').innerHTML = '';
-        log(`Starting task to follow ${count} random users...`);
+        log(`Rozpoczynam zadanie: zaobserwuj ${count} losowych użytkowników...`);
 
         let followedCount = 0;
-        let attempts = 0;
-        const maxAttempts = count * 5; // Prevent infinite loops if hits blank accounts
-
-        // Headers required for authenticating with the GitHub API
         const headers = {
             'Authorization': `token ${token}`,
             'Accept': 'application/vnd.github.v3+json'
         };
 
-        while (followedCount < count && attempts < maxAttempts) {
-            attempts++;
-            
-            // 1. Get a random list page of users (GitHub has millions of users, choosing a random "since" ID)
-            const randomSince = Math.floor(Math.random() * 50000000); 
+        // Lista popularnych liter do losowania użytkowników
+        const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+        while (followedCount < count) {
+            // Generujemy losową literę/cyfrę i losową stronę wyników
+            const randomChar = alphabet[Math.floor(Math.random() * alphabet.length)];
+            const randomPage = Math.floor(Math.random() * 100) + 1; 
             
             try {
-                const response = await fetch(`https://github.com{randomSince}&per_page=1`, { headers });
+                // Wyszukujemy użytkowników pasujących do losowej litery
+                const searchUrl = `https://github.com{randomChar}&page=${randomPage}&per_page=1`;
+                const response = await fetch(searchUrl, { headers });
                 
                 if (response.status === 401) {
-                    log('Error: Invalid GitHub Token.', 'error');
+                    log('Błąd: Nieprawidłowy token GitHub.', 'error');
                     break;
                 }
 
-                const users = await response.json();
-                if (!users || users.length === 0) continue;
-                
-                const targetUser = users[0].login;
-                log(`Found random user: <strong>${targetUser}</strong>. Attempting to follow...`);
+                if (response.status === 403) {
+                    log('Przekroczono limit zapytań API (Rate Limit). Poczekaj chwilę...', 'error');
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    continue;
+                }
 
-                // 2. Send a PUT request to follow the target user
+                const data = await response.json();
+                if (!data.items || data.items.length === 0) continue;
+                
+                const targetUser = data.items[0].login;
+                log(`Znaleziono użytkownika: <strong>${targetUser}</strong>. Próba zaobserwowania...`);
+
+                // Wysyłamy zapytanie o obserwowanie
                 const followResponse = await fetch(`https://github.com{targetUser}`, {
                     method: 'PUT',
                     headers: headers
                 });
 
                 if (followResponse.status === 204) {
-                    log(`Successfully followed ${targetUser}!`, 'success');
+                    log(`Sukces! Zaobserwowano użytkownika ${targetUser}.`, 'success');
                     followedCount++;
                 } else {
-                    log(`Failed to follow ${targetUser} (Status: ${followResponse.status})`, 'error');
+                    log(`Nie udało się zaobserwować ${targetUser} (Status: ${followResponse.status})`, 'error');
                 }
 
-                // Brief pause to respect API rate limits
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Bezpieczna pauza między zapytaniami
+                await new Promise(resolve => setTimeout(resolve, 1500));
 
             } catch (err) {
-                log(`Error occurred: ${err.message}`, 'error');
+                log(`Błąd połączenia: ${err.message}. Ponawiam próbę...`, 'error');
+                await new Promise(resolve => setTimeout(resolve, 2000));
             }
         }
 
-        log(`Finished! Successfully followed ${followedCount} users.`, 'success');
+        log(`Zakończono! Pomyślnie zaobserwowano ${followedCount} użytkowników.`, 'success');
         btn.disabled = false;
     }
 </script>
-
-</body>
-</html>
