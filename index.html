@@ -1,3 +1,88 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Random Follower</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #161b22;
+            padding: 30px;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+            width: 400px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        h2 { text-align: center; color: #f0f6fc; margin-top: 0; }
+        label { display: block; margin: 15px 0 5px; font-size: 14px; }
+        input {
+            width: 100%;
+            padding: 10px;
+            background-color: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #f0f6fc;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-top: 20px;
+            background-color: #238636;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover { background-color: #2ea44f; }
+        button:disabled { background-color: #216e39; opacity: 0.6; cursor: not-allowed; }
+        #logs {
+            margin-top: 20px;
+            max-height: 180px;
+            overflow-y: auto;
+            background: #0d1117;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            border: 1px solid #30363d;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .success { color: #58a6ff; }
+        .error { color: #f85149; }
+        .info { color: #8b949e; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>GitHub Random Follower</h2>
+    
+    <label for="token">GitHub Personal Access Token (PAT):</label>
+    <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+    
+    <label for="count">Ile losowych osób zaobserwować?</label>
+    <input type="number" id="count" value="1" min="1" max="50">
+    
+    <button id="runBtn" onclick="startFollowing()">Znajdź i zaobserwuj</button>
+    
+    <div id="logs">Aplikacja gotowa. Wprowadź token i kliknij przycisk...</div>
+</div>
+
 <script>
     function log(message, type = '') {
         const logsDiv = document.getElementById('logs');
@@ -18,7 +103,7 @@
 
         btn.disabled = true;
         document.getElementById('logs').innerHTML = '';
-        log(`Rozpoczynam zadanie: zaobserwuj ${count} losowych użytkowników...`);
+        log(`Rozpoczynam zadanie: zaobserwuj ${count} losowych użytkowników...`, 'info');
 
         let followedCount = 0;
         const headers = {
@@ -26,16 +111,13 @@
             'Accept': 'application/vnd.github.v3+json'
         };
 
-        // Lista popularnych liter do losowania użytkowników
         const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
 
         while (followedCount < count) {
-            // Generujemy losową literę/cyfrę i losową stronę wyników
             const randomChar = alphabet[Math.floor(Math.random() * alphabet.length)];
             const randomPage = Math.floor(Math.random() * 100) + 1; 
             
             try {
-                // Wyszukujemy użytkowników pasujących do losowej litery
                 const searchUrl = `https://github.com{randomChar}&page=${randomPage}&per_page=1`;
                 const response = await fetch(searchUrl, { headers });
                 
@@ -45,18 +127,20 @@
                 }
 
                 if (response.status === 403) {
-                    log('Przekroczono limit zapytań API (Rate Limit). Poczekaj chwilę...', 'error');
-                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    log('Przekroczono limit zapytań API (Rate Limit). Oczekiwanie 10 sekund...', 'error');
+                    await new Promise(resolve => setTimeout(resolve, 10000));
                     continue;
                 }
 
                 const data = await response.json();
-                if (!data.items || data.items.length === 0) continue;
+                if (!data.items || data.items.length === 0) {
+                    continue;
+                }
                 
+                // Poprawne pobranie login z pierwszego elementu tablicy wynikowej
                 const targetUser = data.items[0].login;
-                log(`Znaleziono użytkownika: <strong>${targetUser}</strong>. Próba zaobserwowania...`);
+                log(`Znaleziono profil: <strong>${targetUser}</strong>. Próba zaobserwowania...`);
 
-                // Wysyłamy zapytanie o obserwowanie
                 const followResponse = await fetch(`https://github.com{targetUser}`, {
                     method: 'PUT',
                     headers: headers
@@ -69,16 +153,19 @@
                     log(`Nie udało się zaobserwować ${targetUser} (Status: ${followResponse.status})`, 'error');
                 }
 
-                // Bezpieczna pauza między zapytaniami
-                await new Promise(resolve => setTimeout(resolve, 1500));
+                // Bezpieczny odstęp czasowy między zapytaniami do API
+                await new Promise(resolve => setTimeout(resolve, 2000));
 
             } catch (err) {
-                log(`Błąd połączenia: ${err.message}. Ponawiam próbę...`, 'error');
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                log(`Błąd połączenia: ${err.message}. Ponawiam próbę za chwilę...`, 'error');
+                await new Promise(resolve => setTimeout(resolve, 3000));
             }
         }
 
-        log(`Zakończono! Pomyślnie zaobserwowano ${followedCount} użytkowników.`, 'success');
+        log(`Zakończono zadanie! Pomyślnie zaobserwowano ${followedCount} użytkowników.`, 'success');
         btn.disabled = false;
     }
 </script>
+
+</body>
+</html>
