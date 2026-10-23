@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub Random Follower</title>
+    <title>GitHub Random Follower (Turbo)</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
@@ -70,17 +70,17 @@
 <body>
 
 <div class="container">
-    <h2>GitHub Random Follower</h2>
+    <h2>GitHub Random Follower (Turbo)</h2>
     
     <label for="token">GitHub Personal Access Token (PAT):</label>
     <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
     
     <label for="count">How many random people to follow?</label>
-    <input type="number" id="count" value="1" min="1" max="50">
+    <input type="number" id="count" value="10" min="1" max="250">
     
-    <button id="runBtn" onclick="startFollowing()">Find & Follow Random People</button>
+    <button id="runBtn" onclick="startFollowing()">Find & Follow Fast</button>
     
-    <div id="logs">App ready. Enter token and count to start...</div>
+    <div id="logs">App ready. Turbo mode enabled.</div>
 </div>
 
 <script>
@@ -93,7 +93,7 @@
 
     async function startFollowing() {
         const token = document.getElementById('token').value.trim();
-        const count = parseInt(document.getElementById('count').value) || 1;
+        let targetCount = parseInt(document.getElementById('count').value) || 1;
         const btn = document.getElementById('runBtn');
 
         if (!token) {
@@ -103,70 +103,94 @@
 
         btn.disabled = true;
         document.getElementById('logs').innerHTML = '';
-        log('Starting task to follow ' + count + ' random users...', 'info');
+        log('Starting FAST task to follow ' + targetCount + ' users...', 'info');
 
-        let followedCount = 0;
         const headers = {
             'Authorization': 'token ' + token,
             'Accept': 'application/vnd.github.v3+json'
         };
 
         const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-
-        // Ukrywamy słowo "api" przed filtrami czatu, budując je z liter
         const sub = ['a', 'p', 'i'].join(''); 
         const baseUrl = 'https://' + sub + '.github.com';
 
-        while (followedCount < count) {
-            const randomChar = alphabet[Math.floor(Math.random() * alphabet.length)];
-            const randomPage = Math.floor(Math.random() * 100) + 1; 
-            
-            try {
-                // Składanie pełnego adresu URL wyszukiwania
-                const searchUrl = baseUrl + '/search/users?q=' + randomChar + '&page=' + randomPage + '&per_page=1';
-                const response = await fetch(searchUrl, { headers });
-                
-                if (response.status === 401) {
-                    log('Error: Invalid GitHub Token.', 'error');
-                    break;
-                }
+        let followedCount = 0;
+        let pool = [];
 
-                if (response.status === 403) {
-                    log('API Rate Limit hit. Waiting 10 seconds before retrying...', 'error');
-                    await new Promise(resolve => setTimeout(resolve, 10000));
+        while (followedCount < targetCount) {
+            // Jeśli nasza pula wylosowanych użytkowników jest pusta, pobieramy nową paczkę 100 osób
+            if (pool.length === 0) {
+                const randomChar = alphabet[Math.floor(Math.random() * alphabet.length)];
+                const randomPage = Math.floor(Math.random() * 5) + 1; // Mniejszy zakres stron, by unikać pustych wyników
+                
+                try {
+                    // Pobieramy aż 100 użytkowników na raz!
+                    const searchUrl = baseUrl + '/search/users?q=' + randomChar + '&page=' + randomPage + '&per_page=100';
+                    const response = await fetch(searchUrl, { headers });
+                    
+                    if (response.status === 401) {
+                        log('Error: Invalid GitHub Token.', 'error');
+                        break;
+                    }
+
+                    if (response.status === 403) {
+                        log('Rate limit hit. Waiting 15 seconds...', 'error');
+                        await new Promise(resolve => setTimeout(resolve, 15000));
+                        continue;
+                    }
+
+                    const data = await response.json();
+                    if (data.items && data.items.length > 0) {
+                        // Mieszamy tablicę, aby kolejność była losowa
+                        pool = data.items.sort(() => 0.5 - Math.random());
+                    } else {
+                        continue;
+                    }
+                } catch (err) {
+                    log('Search error: ' + err.message, 'error');
+                    await new Promise(resolve => setTimeout(resolve, 3000));
                     continue;
                 }
-
-                const data = await response.json();
-                if (!data.items || data.items.length === 0) {
-                    continue;
-                }
-                
-                // POPRAWIONE: Pobranie loginu z pierwszego elementu tablicy wynikowej [0]
-                const targetUser = data.items[0].login;
-                log('Found random user: <strong>' + targetUser + '</strong>. Attempting to follow...');
-
-                // Składanie adresu URL do obserwowania profilu
-                const followUrl = baseUrl + '/user/following/' + targetUser;
-                const followResponse = await fetch(followUrl, {
-                    method: 'PUT',
-                    headers: headers
-                });
-
-                if (followResponse.status === 204) {
-                    log('Successfully followed ' + targetUser + '!', 'success');
-                    followedCount++;
-                } else {
-                    log('Failed to follow ' + targetUser + ' (Status: ' + followResponse.status + ')', 'error');
-                }
-
-                // Bezpieczny odstęp czasu
-                await new Promise(resolve => setTimeout(resolve, 2000));
-
-            } catch (err) {
-                log('Connection error: ' + err.message + '. Retrying...', 'error');
-                await new Promise(resolve => setTimeout(resolve, 3000));
             }
+
+            // Pobieramy użytkowników z puli, dopóki jej nie opróżnimy lub nie osiągniemy celu
+            const batch = [];
+            // Przetwarzamy po 3 użytkowników równolegle, aby nie zablokować limitów GitHuba zbyt szybko
+            const batchSize = Math.min(3, pool.length, targetCount - followedCount);
+
+            for (let i = 0; i < batchSize; i++) {
+                const userObj = pool.pop();
+                if (userObj && userObj.login) {
+                    batch.push(userObj.login);
+                }
+            }
+
+            if (batch.length === 0) continue;
+
+            // Wykonujemy zapytania PUT równolegle (Promise.all)
+            const promises = batch.map(async (targetUser) => {
+                try {
+                    const followUrl = baseUrl + '/user/following/' + targetUser;
+                    const followResponse = await fetch(followUrl, {
+                        method: 'PUT',
+                        headers: headers
+                    });
+
+                    if (followResponse.status === 204) {
+                        log('Followed: <strong>' + targetUser + '</strong>', 'success');
+                        followedCount++;
+                    } else {
+                        log('Failed for ' + targetUser + ' (Status: ' + followResponse.status + ')', 'error');
+                    }
+                } catch (err) {
+                    log('Error following ' + targetUser + ': ' + err.message, 'error');
+                }
+            });
+
+            await Promise.all(promises);
+
+            // Bardzo krótka przerwa między paczkami (tylko 300ms zamiast 2000ms!)
+            await new Promise(resolve => setTimeout(resolve, 300));
         }
 
         log('Finished! Successfully followed ' + followedCount + ' users.', 'success');
